@@ -1,0 +1,151 @@
+//@version=5
+indicator("Daily FVG Draw Bias v7", overlay=true)
+
+// Inputs
+minDailyFvgAtr = input.float(0.20, "Min Daily FVG Size ATR", minval=0.0, step=0.05)
+useFvgMidTarget = input.bool(true, "Use 50% Target When Price Is Inside Daily FVG")
+m15Tf = input.timeframe("15", "Confirmation Timeframe")
+liquidityLookback = input.int(32, "15m Liquidity Lookback Bars", minval=2)
+minWickRatio = input.float(0.25, "Min Sweep Wick Ratio", minval=0.0, maxval=1.0, step=0.05)
+show15mFvg = input.bool(true, "Show Same-Direction 15m FVG")
+show15mSweep = input.bool(true, "Show Same-Direction 15m Liquidity Sweep")
+
+// Daily candles
+dHigh = request.security(syminfo.tickerid, "D", high)
+dLow = request.security(syminfo.tickerid, "D", low)
+dClose = request.security(syminfo.tickerid, "D", close)
+dAtr = request.security(syminfo.tickerid, "D", ta.atr(14))
+
+// Daily FVG definitions
+bullishFvg = request.security(syminfo.tickerid, "D", low > high[2])
+bullishFvgTop = request.security(syminfo.tickerid, "D", low)
+bullishFvgBottom = request.security(syminfo.tickerid, "D", high[2])
+bullishFvgSize = bullishFvgTop - bullishFvgBottom
+
+bearishFvg = request.security(syminfo.tickerid, "D", high < low[2])
+bearishFvgTop = request.security(syminfo.tickerid, "D", low[2])
+bearishFvgBottom = request.security(syminfo.tickerid, "D", high)
+bearishFvgSize = bearishFvgTop - bearishFvgBottom
+
+validBullishFvg = bullishFvg and bullishFvgSize >= dAtr * minDailyFvgAtr
+validBearishFvg = bearishFvg and bearishFvgSize >= dAtr * minDailyFvgAtr
+
+// Store latest unfilled FVG above / below price
+var float upperFvgTop = na
+var float upperFvgBottom = na
+var float upperFvgSize = na
+var float lowerFvgTop = na
+var float lowerFvgBottom = na
+var float lowerFvgSize = na
+
+// Bearish FVG above price can become upside draw
+if validBearishFvg and bearishFvgBottom > dClose
+    upperFvgTop := bearishFvgTop
+    upperFvgBottom := bearishFvgBottom
+    upperFvgSize := bearishFvgSize
+
+// Bullish FVG below price can become downside draw
+if validBullishFvg and bullishFvgTop < dClose
+    lowerFvgTop := bullishFvgTop
+    lowerFvgBottom := bullishFvgBottom
+    lowerFvgSize := bullishFvgSize
+
+// Check filled
+upperFilled = not na(upperFvgTop) and dHigh >= upperFvgTop
+lowerFilled = not na(lowerFvgBottom) and dLow <= lowerFvgBottom
+
+if upperFilled
+    upperFvgTop := na
+    upperFvgBottom := na
+    upperFvgSize := na
+
+if lowerFilled
+    lowerFvgTop := na
+    lowerFvgBottom := na
+    lowerFvgSize := na
+
+// Bias
+upperFvgMid = (upperFvgTop + upperFvgBottom) / 2
+lowerFvgMid = (lowerFvgTop + lowerFvgBottom) / 2
+insideUpperFvg = useFvgMidTarget and not na(upperFvgTop) and dClose >= upperFvgBottom and dClose < upperFvgMid
+insideLowerFvg = useFvgMidTarget and not na(lowerFvgBottom) and dClose <= lowerFvgTop and dClose > lowerFvgMid
+upperAvailable = not na(upperFvgTop) and (dClose < upperFvgBottom or insideUpperFvg)
+lowerAvailable = not na(lowerFvgBottom) and (dClose > lowerFvgTop or insideLowerFvg)
+upperTarget = insideUpperFvg ? upperFvgMid : upperFvgBottom
+lowerTarget = insideLowerFvg ? lowerFvgMid : lowerFvgTop
+upperDistance = upperAvailable ? math.abs(upperTarget - dClose) : na
+lowerDistance = lowerAvailable ? math.abs(dClose - lowerTarget) : na
+upperScore = upperAvailable ? upperFvgSize / math.max(upperDistance, syminfo.mintick) : na
+lowerScore = lowerAvailable ? lowerFvgSize / math.max(lowerDistance, syminfo.mintick) : na
+
+bullDraw = upperAvailable and (not lowerAvailable or upperScore > lowerScore)
+bearDraw = lowerAvailable and (not upperAvailable or lowerScore > upperScore)
+
+bgcolor(bullDraw ? color.new(color.green, 88) : bearDraw ? color.new(color.red, 88) : na)
+
+// 15m confirmation: same-direction FVG or liquidity sweep.
+//
+// Bullish FVG: current 15m low is above the high from two 15m candles ago.
+// Bearish FVG: current 15m high is below the low from two 15m candles ago.
+m15BullFvg = request.security(syminfo.tickerid, m15Tf, low > high[2])
+m15BullFvgTop = request.security(syminfo.tickerid, m15Tf, low)
+m15BullFvgBottom = request.security(syminfo.tickerid, m15Tf, high[2])
+
+m15BearFvg = request.security(syminfo.tickerid, m15Tf, high < low[2])
+m15BearFvgTop = request.security(syminfo.tickerid, m15Tf, low[2])
+m15BearFvgBottom = request.security(syminfo.tickerid, m15Tf, high)
+
+// Liquidity sweep uses the relative high/low from the previous 8 hours by default.
+// On 15m, 32 bars = 8 hours.
+m15RangeLow = request.security(syminfo.tickerid, m15Tf, ta.lowest(low[1], liquidityLookback))
+m15RangeHigh = request.security(syminfo.tickerid, m15Tf, ta.highest(high[1], liquidityLookback))
+
+m15BullSweep = request.security(syminfo.tickerid, m15Tf, low < ta.lowest(low[1], liquidityLookback) and close > ta.lowest(low[1], liquidityLookback) and (math.min(open, close) - low) / math.max(high - low, syminfo.mintick) >= minWickRatio)
+m15BearSweep = request.security(syminfo.tickerid, m15Tf, high > ta.highest(high[1], liquidityLookback) and close < ta.highest(high[1], liquidityLookback) and (high - math.max(open, close)) / math.max(high - low, syminfo.mintick) >= minWickRatio)
+
+sameDirectionBullFvg = bullDraw and m15BullFvg
+sameDirectionBearFvg = bearDraw and m15BearFvg
+sameDirectionBullSweep = bullDraw and m15BullSweep
+sameDirectionBearSweep = bearDraw and m15BearSweep
+
+var float active15BullFvgTop = na
+var float active15BullFvgBottom = na
+var float active15BearFvgTop = na
+var float active15BearFvgBottom = na
+
+if sameDirectionBullFvg
+    active15BullFvgTop := m15BullFvgTop
+    active15BullFvgBottom := m15BullFvgBottom
+
+if sameDirectionBearFvg
+    active15BearFvgTop := m15BearFvgTop
+    active15BearFvgBottom := m15BearFvgBottom
+
+if not na(active15BullFvgTop) and low <= active15BullFvgBottom
+    active15BullFvgTop := na
+    active15BullFvgBottom := na
+
+if not na(active15BearFvgBottom) and high >= active15BearFvgTop
+    active15BearFvgTop := na
+    active15BearFvgBottom := na
+
+// Plot zones
+plot(upperFvgTop, "Upper FVG Top", color=color.red)
+plot(upperFvgBottom, "Upper FVG Bottom", color=color.red)
+plot(useFvgMidTarget ? upperFvgMid : na, "Upper FVG 50%", color=color.new(color.red, 60), style=plot.style_linebr)
+
+plot(lowerFvgTop, "Lower FVG Top", color=color.green)
+plot(lowerFvgBottom, "Lower FVG Bottom", color=color.green)
+plot(useFvgMidTarget ? lowerFvgMid : na, "Lower FVG 50%", color=color.new(color.green, 60), style=plot.style_linebr)
+
+plot(show15mFvg ? active15BullFvgTop : na, "15m Bull FVG Top", color=color.new(color.aqua, 0), style=plot.style_linebr)
+plot(show15mFvg ? active15BullFvgBottom : na, "15m Bull FVG Bottom", color=color.new(color.aqua, 0), style=plot.style_linebr)
+
+plot(show15mFvg ? active15BearFvgTop : na, "15m Bear FVG Top", color=color.new(color.fuchsia, 0), style=plot.style_linebr)
+plot(show15mFvg ? active15BearFvgBottom : na, "15m Bear FVG Bottom", color=color.new(color.fuchsia, 0), style=plot.style_linebr)
+
+plot(show15mSweep ? m15RangeLow : na, "15m 8H Range Low Liquidity", color=color.new(color.lime, 70), style=plot.style_linebr)
+plot(show15mSweep ? m15RangeHigh : na, "15m 8H Range High Liquidity", color=color.new(color.red, 70), style=plot.style_linebr)
+
+plotshape(show15mSweep and sameDirectionBullSweep, title="15m Bullish Liquidity Sweep", text="15m Sweep", style=shape.triangleup, location=location.belowbar, color=color.new(color.lime, 0), textcolor=color.white, size=size.tiny)
+plotshape(show15mSweep and sameDirectionBearSweep, title="15m Bearish Liquidity Sweep", text="15m Sweep", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 0), textcolor=color.white, size=size.tiny)
