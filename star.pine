@@ -90,10 +90,12 @@ bgcolor(bullDraw ? color.new(color.green, 88) : bearDraw ? color.new(color.red, 
 m15BullFvg = request.security(syminfo.tickerid, m15Tf, low > high[2])
 m15BullFvgTop = request.security(syminfo.tickerid, m15Tf, low)
 m15BullFvgBottom = request.security(syminfo.tickerid, m15Tf, high[2])
+m15Low = request.security(syminfo.tickerid, m15Tf, low)
 
 m15BearFvg = request.security(syminfo.tickerid, m15Tf, high < low[2])
 m15BearFvgTop = request.security(syminfo.tickerid, m15Tf, low[2])
 m15BearFvgBottom = request.security(syminfo.tickerid, m15Tf, high)
+m15High = request.security(syminfo.tickerid, m15Tf, high)
 
 // Liquidity sweep uses the relative high/low from the previous 8 hours by default.
 // On 15m, 32 bars = 8 hours.
@@ -121,11 +123,11 @@ if sameDirectionBearFvg
     active15BearFvgTop := m15BearFvgTop
     active15BearFvgBottom := m15BearFvgBottom
 
-if not na(active15BullFvgTop) and low <= active15BullFvgBottom
+if not na(active15BullFvgTop) and m15Low <= active15BullFvgBottom
     active15BullFvgTop := na
     active15BullFvgBottom := na
 
-if not na(active15BearFvgBottom) and high >= active15BearFvgTop
+if not na(active15BearFvgBottom) and m15High >= active15BearFvgTop
     active15BearFvgTop := na
     active15BearFvgBottom := na
 
