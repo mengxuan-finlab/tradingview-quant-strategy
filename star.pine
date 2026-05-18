@@ -1,5 +1,5 @@
 //@version=5
-indicator("Daily FVG Draw Bias v7", overlay=true)
+indicator("Daily FVG Draw Bias v7", overlay=true, max_boxes_count=50)
 
 // Inputs
 minDailyFvgAtr = input.float(0.20, "Min Daily FVG Size ATR", minval=0.0, step=0.05)
@@ -9,6 +9,7 @@ liquidityLookback = input.int(32, "15m Liquidity Lookback Bars", minval=2)
 minWickRatio = input.float(0.25, "Min Sweep Wick Ratio", minval=0.0, maxval=1.0, step=0.05)
 show15mFvg = input.bool(true, "Show Same-Direction 15m FVG")
 show15mSweep = input.bool(true, "Show Same-Direction 15m Liquidity Sweep")
+show15mFvgBox = input.bool(true, "Show 15m FVG As Box On Lower TF")
 
 // Daily candles
 dHigh = request.security(syminfo.tickerid, "D", high)
@@ -90,12 +91,10 @@ bgcolor(bullDraw ? color.new(color.green, 88) : bearDraw ? color.new(color.red, 
 m15BullFvg = request.security(syminfo.tickerid, m15Tf, low > high[2])
 m15BullFvgTop = request.security(syminfo.tickerid, m15Tf, low)
 m15BullFvgBottom = request.security(syminfo.tickerid, m15Tf, high[2])
-m15Low = request.security(syminfo.tickerid, m15Tf, low)
 
 m15BearFvg = request.security(syminfo.tickerid, m15Tf, high < low[2])
 m15BearFvgTop = request.security(syminfo.tickerid, m15Tf, low[2])
 m15BearFvgBottom = request.security(syminfo.tickerid, m15Tf, high)
-m15High = request.security(syminfo.tickerid, m15Tf, high)
 
 // Liquidity sweep uses the relative high/low from the previous 8 hours by default.
 // On 15m, 32 bars = 8 hours.
@@ -123,13 +122,45 @@ if sameDirectionBearFvg
     active15BearFvgTop := m15BearFvgTop
     active15BearFvgBottom := m15BearFvgBottom
 
-if not na(active15BullFvgTop) and m15Low <= active15BullFvgBottom
+if not na(active15BullFvgTop) and low <= active15BullFvgBottom
     active15BullFvgTop := na
     active15BullFvgBottom := na
 
-if not na(active15BearFvgBottom) and m15High >= active15BearFvgTop
+if not na(active15BearFvgBottom) and high >= active15BearFvgTop
     active15BearFvgTop := na
     active15BearFvgBottom := na
+
+// Extra visual layer for lower timeframes. This keeps the existing 15m logic unchanged,
+// but makes the active 15m FVG easier to read on 1m charts.
+newActive15BullFvg = show15mFvgBox and show15mFvg and not na(active15BullFvgTop) and (na(active15BullFvgTop[1]) or active15BullFvgTop != active15BullFvgTop[1] or active15BullFvgBottom != active15BullFvgBottom[1])
+newActive15BearFvg = show15mFvgBox and show15mFvg and not na(active15BearFvgTop) and (na(active15BearFvgTop[1]) or active15BearFvgTop != active15BearFvgTop[1] or active15BearFvgBottom != active15BearFvgBottom[1])
+
+var box active15BullFvgBox = na
+var box active15BearFvgBox = na
+
+if newActive15BullFvg
+    if not na(active15BullFvgBox)
+        box.delete(active15BullFvgBox)
+    active15BullFvgBox := box.new(bar_index, active15BullFvgTop, bar_index, active15BullFvgBottom, bgcolor=color.new(color.aqua, 85), border_color=color.new(color.aqua, 20))
+else if show15mFvgBox and show15mFvg and not na(active15BullFvgBox) and not na(active15BullFvgTop)
+    box.set_right(active15BullFvgBox, bar_index)
+    box.set_top(active15BullFvgBox, active15BullFvgTop)
+    box.set_bottom(active15BullFvgBox, active15BullFvgBottom)
+else if not na(active15BullFvgBox) and (not show15mFvgBox or not show15mFvg or na(active15BullFvgTop))
+    box.delete(active15BullFvgBox)
+    active15BullFvgBox := na
+
+if newActive15BearFvg
+    if not na(active15BearFvgBox)
+        box.delete(active15BearFvgBox)
+    active15BearFvgBox := box.new(bar_index, active15BearFvgTop, bar_index, active15BearFvgBottom, bgcolor=color.new(color.fuchsia, 85), border_color=color.new(color.fuchsia, 20))
+else if show15mFvgBox and show15mFvg and not na(active15BearFvgBox) and not na(active15BearFvgTop)
+    box.set_right(active15BearFvgBox, bar_index)
+    box.set_top(active15BearFvgBox, active15BearFvgTop)
+    box.set_bottom(active15BearFvgBox, active15BearFvgBottom)
+else if not na(active15BearFvgBox) and (not show15mFvgBox or not show15mFvg or na(active15BearFvgTop))
+    box.delete(active15BearFvgBox)
+    active15BearFvgBox := na
 
 // Plot zones
 plot(upperFvgTop, "Upper FVG Top", color=color.red)
