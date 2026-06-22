@@ -1,4 +1,4 @@
-# 量化系統
+﻿# 量化系統
 
 這裡放的是非 UI 的量化核心，不是 Streamlit 原型。
 
@@ -16,16 +16,16 @@
 $env:FMP_API_KEY="your_api_key"
 ```
 
-進入這個資料夾：
-
-```powershell
-cd C:\Users\user\OneDrive\Desktop\量化
-```
-
-跑一組股票：
+跑幾支股票：
 
 ```powershell
 python -m quant_system.run_universe --symbols AAPL,MSFT,NVDA
+```
+
+用股票池檔案跑，先限制前 20 檔，避免一次打爆 API 額度：
+
+```powershell
+python -m quant_system.run_universe --universe quant_system/universe/us_large_cap.csv --limit 20
 ```
 
 輸出結果：

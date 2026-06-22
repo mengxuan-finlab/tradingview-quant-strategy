@@ -1,0 +1,9 @@
+﻿# Python
+__pycache__/
+*.pyc
+
+# Local secrets
+.env
+
+# Generated quant outputs
+quant_system/output/

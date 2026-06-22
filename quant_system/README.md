@@ -1,4 +1,4 @@
-# Fundamental Quant System
+﻿# Fundamental Quant System
 
 This folder is the non-UI core for a fundamental quant workflow:
 
@@ -14,10 +14,16 @@ Set your API key in PowerShell:
 $env:FMP_API_KEY="your_api_key"
 ```
 
-Run a small universe:
+Run a small symbol list:
 
 ```powershell
 python -m quant_system.run_universe --symbols AAPL,MSFT,NVDA
+```
+
+Run a universe file with a safety limit:
+
+```powershell
+python -m quant_system.run_universe --universe quant_system/universe/us_large_cap.csv --limit 20
 ```
 
 Output:
