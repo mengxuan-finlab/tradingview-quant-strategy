@@ -20,7 +20,14 @@ OUTPUT_COLUMNS = [
     "upside",
     "score",
     "wacc",
+    "dcf_growth_rate",
+    "growth_estimate",
+    "revenue_growth",
     "fcf_growth",
+    "eps_growth",
+    "momentum_3m",
+    "momentum_6m",
+    "momentum_12m",
     "free_cash_flow",
     "market_cap",
     "beta",
@@ -156,4 +163,8 @@ def write_results(results, output_path):
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
