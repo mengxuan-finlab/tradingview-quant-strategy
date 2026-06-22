@@ -5,11 +5,16 @@ from pathlib import Path
 from quant_system.config import get_fmp_api_key
 from quant_system.data_pipeline import fetch_fundamental_snapshot
 from quant_system.fmp_client import FmpClient
+from quant_system.strategy import apply_quality_value_strategy
 from quant_system.valuation_engine import value_stock
 
 
 OUTPUT_COLUMNS = [
     "symbol",
+    "pass_strategy",
+    "strategy_score",
+    "research_priority",
+    "reject_reasons",
     "price",
     "fair_value",
     "upside",
@@ -21,6 +26,7 @@ OUTPUT_COLUMNS = [
     "beta",
     "roic",
     "debt_to_equity",
+    "strategy",
 ]
 
 
@@ -61,25 +67,32 @@ def main():
     for index, symbol in enumerate(symbols, start=1):
         try:
             snapshot = fetch_fundamental_snapshot(client, symbol)
-            result = value_stock(
+            valuation = value_stock(
                 snapshot,
                 risk_free_rate=args.risk_free_rate,
                 market_return=args.market_return,
                 terminal_growth_rate=args.terminal_growth_rate,
                 tax_rate=args.tax_rate,
             )
+            result = apply_quality_value_strategy(valuation)
             results.append(result)
+            status = "PASS" if result["pass_strategy"] else "FAIL"
             print(
-                f"[{index}/{len(symbols)}] {symbol}: "
+                f"[{index}/{len(symbols)}] {symbol}: {status}, "
                 f"fair_value={result['fair_value']:.2f}, "
-                f"upside={result['upside']:.2%}, score={result['score']:.2f}"
+                f"upside={result['upside']:.2%}, "
+                f"strategy_score={result['strategy_score']:.2f}, research={result['research_priority']}"
             )
         except Exception as error:
             print(f"[{index}/{len(symbols)}] {symbol}: failed - {error}")
 
-    results.sort(key=lambda item: item["score"], reverse=True)
+    results.sort(
+        key=lambda item: (item["pass_strategy"], item["strategy_score"]),
+        reverse=True,
+    )
     write_results(results, args.output)
-    print(f"Wrote {len(results)} rows to {args.output}")
+    passed_count = sum(1 for result in results if result["pass_strategy"])
+    print(f"Wrote {len(results)} rows to {args.output}; {passed_count} passed strategy")
 
 
 def load_symbols(symbols_arg, universe_path):
@@ -143,3 +156,4 @@ def write_results(results, output_path):
 
 if __name__ == "__main__":
     main()
+
