@@ -16,6 +16,14 @@ OUTPUT_COLUMNS = [
     "research_priority",
     "reject_reasons",
     "price",
+    "company_name",
+    "sector",
+    "industry",
+    "exchange",
+    "is_etf",
+    "is_fund",
+    "is_adr",
+    "is_actively_trading",
     "fair_value",
     "upside",
     "score",
@@ -163,6 +171,8 @@ def write_results(results, output_path):
 
 if __name__ == "__main__":
     main()
+
+
 
 
 

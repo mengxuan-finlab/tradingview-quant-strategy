@@ -79,6 +79,14 @@ def fetch_fundamental_snapshot(client, symbol):
 
     return {
         "symbol": clean_symbol,
+        "company_name": str(profile.get("companyName") or ""),
+        "sector": str(profile.get("sector") or ""),
+        "industry": str(profile.get("industry") or ""),
+        "exchange": str(profile.get("exchange") or ""),
+        "is_etf": bool(profile.get("isEtf")),
+        "is_fund": bool(profile.get("isFund")),
+        "is_adr": bool(profile.get("isAdr")),
+        "is_actively_trading": bool(profile.get("isActivelyTrading", True)),
         "price": first_number(quote, ["price"], fallback=number(profile.get("price"))),
         "market_cap": first_number(
             quote,

@@ -21,26 +21,34 @@ RESEARCH_CANDIDATE = {
 }
 
 
+EXCLUDED_SECTORS = {
+    "Financial Services",
+    "Real Estate",
+}
+
+
+EXCLUDED_INDUSTRY_KEYWORDS = [
+    "bank",
+    "banks",
+    "insurance",
+    "reit",
+    "mortgage",
+    "asset management",
+    "capital markets",
+]
+
+
 def apply_quality_value_strategy(stock, config=None):
     config = config or DEFAULT_STRATEGY
-    reasons = []
-
-    if stock["price"] <= 0:
-        reasons.append("no_price")
-    if stock["free_cash_flow"] <= 0:
-        reasons.append("negative_or_zero_fcf")
-    if stock["market_cap"] < config["min_market_cap"]:
-        reasons.append("market_cap_too_small")
-    if stock.get("roic", 0.0) < config["min_roic"]:
-        reasons.append("roic_too_low")
-    if stock.get("debt_to_equity", 0.0) > config["max_debt_to_equity"]:
-        reasons.append("debt_too_high")
-    if stock["wacc"] <= 0 or stock["wacc"] > config["max_wacc"]:
-        reasons.append("wacc_out_of_range")
-
+    reasons = rejection_reasons(stock, config)
     strategy_score = medium_term_factor_score(stock)
-    research_priority = classify_research_priority(stock, strategy_score)
-    pass_strategy = len(reasons) == 0 and strategy_score >= config["min_strategy_score"]
+    eligible_for_research = len(reasons) == 0
+    research_priority = classify_research_priority(
+        stock,
+        strategy_score,
+        eligible_for_research=eligible_for_research,
+    )
+    pass_strategy = eligible_for_research and strategy_score >= config["min_strategy_score"]
 
     return {
         **stock,
@@ -50,6 +58,45 @@ def apply_quality_value_strategy(stock, config=None):
         "research_priority": research_priority,
         "reject_reasons": ";".join(reasons),
     }
+
+
+def rejection_reasons(stock, config):
+    reasons = []
+
+    if stock.get("is_etf"):
+        reasons.append("excluded_etf")
+    if stock.get("is_fund"):
+        reasons.append("excluded_fund")
+    if stock.get("is_adr"):
+        reasons.append("excluded_adr")
+    if not stock.get("is_actively_trading", True):
+        reasons.append("not_actively_trading")
+    if is_excluded_business(stock):
+        reasons.append("excluded_sector_or_industry")
+    if stock["price"] <= 0:
+        reasons.append("no_price")
+    if stock["free_cash_flow"] <= 0:
+        reasons.append("negative_or_zero_fcf")
+    if stock["market_cap"] < config["min_market_cap"]:
+        reasons.append("market_cap_too_small")
+    if stock.get("roic", 0.0) < config["min_roic"]:
+        reasons.append("roic_too_low")
+    if stock.get("debt_to_equity", 0.0) < 0 or stock.get("debt_to_equity", 0.0) > config["max_debt_to_equity"]:
+        reasons.append("debt_too_high_or_invalid")
+    if stock["wacc"] <= 0 or stock["wacc"] > config["max_wacc"]:
+        reasons.append("wacc_out_of_range")
+
+    return reasons
+
+
+def is_excluded_business(stock):
+    sector = stock.get("sector", "")
+    industry = stock.get("industry", "").lower()
+
+    if sector in EXCLUDED_SECTORS:
+        return True
+
+    return any(keyword in industry for keyword in EXCLUDED_INDUSTRY_KEYWORDS)
 
 
 def medium_term_factor_score(stock):
@@ -79,7 +126,10 @@ def momentum_factor_score(stock):
     return clamp((blended_momentum + 0.20) / 0.80)
 
 
-def classify_research_priority(stock, strategy_score, config=None):
+def classify_research_priority(stock, strategy_score, eligible_for_research, config=None):
+    if not eligible_for_research:
+        return "IGNORE"
+
     config = config or RESEARCH_CANDIDATE
 
     is_extreme_candidate = (
@@ -98,3 +148,4 @@ def classify_research_priority(stock, strategy_score, config=None):
         return "WATCH"
 
     return "IGNORE"
+
