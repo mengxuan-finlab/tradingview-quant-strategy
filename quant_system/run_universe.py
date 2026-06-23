@@ -5,6 +5,7 @@ from pathlib import Path
 from quant_system.config import get_fmp_api_key
 from quant_system.data_pipeline import fetch_fundamental_snapshot
 from quant_system.fmp_client import FmpClient
+from quant_system.portfolio import DEFAULT_PORTFOLIO, build_portfolio
 from quant_system.strategy import apply_quality_value_strategy
 from quant_system.valuation_engine import value_stock
 
@@ -45,6 +46,13 @@ OUTPUT_COLUMNS = [
 ]
 
 
+PORTFOLIO_COLUMNS = [
+    "portfolio_rank",
+    "target_weight",
+    *OUTPUT_COLUMNS,
+]
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run fundamental quant valuation.")
     parser.add_argument(
@@ -60,7 +68,40 @@ def main():
         default="quant_system/output/valuation_results.csv",
         help="CSV output path.",
     )
+    parser.add_argument(
+        "--portfolio-output",
+        default="quant_system/output/portfolio_results.csv",
+        help="CSV output path for the final portfolio after position constraints.",
+    )
+    parser.add_argument(
+        "--failed-output",
+        default="quant_system/output/failed_symbols.csv",
+        help="CSV output path for symbols that failed during data collection or valuation.",
+    )
     parser.add_argument("--limit", type=int, help="Only run the first N symbols.")
+    parser.add_argument(
+        "--portfolio-size",
+        type=int,
+        default=DEFAULT_PORTFOLIO["portfolio_size"],
+        help="Maximum number of stocks in the final portfolio.",
+    )
+    parser.add_argument(
+        "--max-sector-count",
+        type=int,
+        default=DEFAULT_PORTFOLIO["max_sector_count"],
+        help="Maximum number of portfolio stocks from one sector.",
+    )
+    parser.add_argument(
+        "--max-industry-count",
+        type=int,
+        default=DEFAULT_PORTFOLIO["max_industry_count"],
+        help="Maximum number of portfolio stocks from one industry.",
+    )
+    parser.add_argument(
+        "--allow-negative-dcf-upside",
+        action="store_true",
+        help="Allow stocks with negative DCF upside into the final portfolio.",
+    )
     parser.add_argument("--risk-free-rate", type=float, default=0.04)
     parser.add_argument("--market-return", type=float, default=0.10)
     parser.add_argument("--terminal-growth-rate", type=float, default=0.03)
@@ -76,6 +117,7 @@ def main():
 
     client = FmpClient(get_fmp_api_key())
     results = []
+    failures = []
 
     print(f"Running {len(symbols)} symbols...")
 
@@ -100,14 +142,32 @@ def main():
             )
         except Exception as error:
             print(f"[{index}/{len(symbols)}] {symbol}: failed - {error}")
+            failures.append({"symbol": symbol, "error": str(error)})
 
     results.sort(
         key=lambda item: (item["pass_strategy"], item["strategy_score"]),
         reverse=True,
     )
     write_results(results, args.output)
+    portfolio = build_portfolio(
+        results,
+        {
+            "portfolio_size": args.portfolio_size,
+            "max_sector_count": args.max_sector_count,
+            "max_industry_count": args.max_industry_count,
+            "require_positive_upside": not args.allow_negative_dcf_upside,
+        },
+    )
+    write_results(portfolio, args.portfolio_output, fieldnames=PORTFOLIO_COLUMNS)
+    write_failures(failures, args.failed_output)
     passed_count = sum(1 for result in results if result["pass_strategy"])
     print(f"Wrote {len(results)} rows to {args.output}; {passed_count} passed strategy")
+    print(
+        f"Wrote {len(portfolio)} portfolio rows to {args.portfolio_output}; "
+        f"target_weight={1 / len(portfolio):.2%}" if portfolio else
+        f"Wrote 0 portfolio rows to {args.portfolio_output}"
+    )
+    print(f"Wrote {len(failures)} failed symbols to {args.failed_output}")
 
 
 def load_symbols(symbols_arg, universe_path):
@@ -158,15 +218,26 @@ def dedupe_symbols(symbols):
     return clean_symbols
 
 
-def write_results(results, output_path):
+def write_results(results, output_path, fieldnames=None):
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = fieldnames or OUTPUT_COLUMNS
+
+    with path.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        for result in results:
+            writer.writerow({column: result.get(column, "") for column in fieldnames})
+
+
+def write_failures(failures, output_path):
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with path.open("w", encoding="utf-8-sig", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=OUTPUT_COLUMNS)
+        writer = csv.DictWriter(file, fieldnames=["symbol", "error"])
         writer.writeheader()
-        for result in results:
-            writer.writerow({column: result.get(column, "") for column in OUTPUT_COLUMNS})
+        writer.writerows(failures)
 
 
 if __name__ == "__main__":
