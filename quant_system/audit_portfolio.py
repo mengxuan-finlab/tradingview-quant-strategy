@@ -7,6 +7,7 @@ from quant_system.build_portfolio_from_results import coerce_row
 
 AUDIT_COLUMNS = [
     "portfolio_rank",
+    "portfolio_sleeve",
     "symbol",
     "company_name",
     "sector",
@@ -88,6 +89,7 @@ def audit_row(row):
     flags = warning_flags(row)
     return {
         "portfolio_rank": row.get("portfolio_rank", ""),
+        "portfolio_sleeve": row.get("portfolio_sleeve", ""),
         "symbol": row.get("symbol", ""),
         "company_name": row.get("company_name", ""),
         "sector": row.get("sector", ""),

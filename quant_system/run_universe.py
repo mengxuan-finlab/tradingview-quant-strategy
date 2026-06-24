@@ -49,6 +49,7 @@ OUTPUT_COLUMNS = [
 PORTFOLIO_COLUMNS = [
     "portfolio_rank",
     "target_weight",
+    "portfolio_sleeve",
     *OUTPUT_COLUMNS,
 ]
 
@@ -86,6 +87,18 @@ def main():
         help="Maximum number of stocks in the final portfolio.",
     )
     parser.add_argument(
+        "--value-sleeve-size",
+        type=int,
+        default=DEFAULT_PORTFOLIO["value_sleeve_size"],
+        help="Target number of DCF-positive value stocks in the final portfolio.",
+    )
+    parser.add_argument(
+        "--quality-growth-sleeve-size",
+        type=int,
+        default=DEFAULT_PORTFOLIO["quality_growth_sleeve_size"],
+        help="Target number of high-quality growth stocks allowed to have modest negative DCF upside.",
+    )
+    parser.add_argument(
         "--max-sector-count",
         type=int,
         default=DEFAULT_PORTFOLIO["max_sector_count"],
@@ -96,11 +109,6 @@ def main():
         type=int,
         default=DEFAULT_PORTFOLIO["max_industry_count"],
         help="Maximum number of portfolio stocks from one industry.",
-    )
-    parser.add_argument(
-        "--allow-negative-dcf-upside",
-        action="store_true",
-        help="Allow stocks with negative DCF upside into the final portfolio.",
     )
     parser.add_argument("--risk-free-rate", type=float, default=0.04)
     parser.add_argument("--market-return", type=float, default=0.10)
@@ -153,9 +161,10 @@ def main():
         results,
         {
             "portfolio_size": args.portfolio_size,
+            "value_sleeve_size": args.value_sleeve_size,
+            "quality_growth_sleeve_size": args.quality_growth_sleeve_size,
             "max_sector_count": args.max_sector_count,
             "max_industry_count": args.max_industry_count,
-            "require_positive_upside": not args.allow_negative_dcf_upside,
         },
     )
     write_results(portfolio, args.portfolio_output, fieldnames=PORTFOLIO_COLUMNS)
