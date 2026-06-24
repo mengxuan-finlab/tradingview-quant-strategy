@@ -7,3 +7,6 @@ __pycache__/
 
 # Generated quant outputs
 quant_system/output/
+
+# Generated historical data cache
+quant_system/cache/
