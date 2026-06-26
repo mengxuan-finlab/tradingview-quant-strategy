@@ -65,6 +65,12 @@ def main():
         action="store_true",
         help="Fetch symbols even if they already appear in the profile cache.",
     )
+    parser.add_argument(
+        "--max-consecutive-failures",
+        type=int,
+        default=25,
+        help="Stop the run after this many consecutive failures. Use 0 to disable.",
+    )
     args = parser.parse_args()
 
     symbols = load_symbols(args.symbols, args.universe)
@@ -78,6 +84,7 @@ def main():
     completed = set() if args.force else read_completed_symbols(cache_dir)
     client = FmpClient(get_fmp_api_key())
     failures = []
+    consecutive_failures = 0
 
     print(f"Building historical cache for {len(symbols)} symbols...")
     print(f"Cache directory: {cache_dir}")
@@ -92,10 +99,22 @@ def main():
             write_symbol_cache(fetched, cache_dir)
             append_rows(cache_dir / "completed_historical.csv", [{"symbol": symbol}])
             completed.add(symbol)
+            consecutive_failures = 0
             print(f"[{index}/{len(symbols)}] {symbol}: cached")
         except Exception as error:
             print(f"[{index}/{len(symbols)}] {symbol}: failed - {error}")
             failures.append({"symbol": symbol, "error": str(error)})
+            consecutive_failures += 1
+            if (
+                args.max_consecutive_failures > 0
+                and consecutive_failures >= args.max_consecutive_failures
+            ):
+                print(
+                    "Stopping after "
+                    f"{consecutive_failures} consecutive failures. "
+                    "Check network/API status, then rerun to continue."
+                )
+                break
 
     if failures:
         append_rows(cache_dir / "failed_historical.csv", failures)
