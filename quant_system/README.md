@@ -31,3 +31,35 @@ Output:
 ```text
 quant_system/output/valuation_results.csv
 ```
+
+Build historical quarterly snapshots for backtesting:
+
+```powershell
+python -m quant_system.quarterly_snapshot_builder --universe quant_system/universe/us_large_cap.csv --start-date 2021-06-28
+```
+
+Test with a few symbols first:
+
+```powershell
+python -m quant_system.quarterly_snapshot_builder --symbols AAPL,MSFT,ANET,XOM --start-date 2022-01-01 --end-date 2023-12-31 --output quant_system/output/test_historical_quarterly_snapshots.csv --failed-output quant_system/output/test_failed_historical_snapshots.csv
+```
+
+Historical snapshot output:
+
+```text
+quant_system/output/historical_quarterly_snapshots.csv
+```
+
+Run the quarterly backtest:
+
+```powershell
+python -m quant_system.backtest
+```
+
+Backtest output:
+
+```text
+quant_system/output/backtest_summary.csv
+quant_system/output/backtest_holdings.csv
+quant_system/output/backtest_metrics.csv
+```
