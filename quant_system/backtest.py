@@ -24,11 +24,19 @@ SUMMARY_COLUMNS = [
     "pass_count",
     "holdings_count",
     "missing_exit_count",
+    "buy_turnover",
+    "sell_turnover",
+    "turnover",
+    "transaction_cost",
+    "gross_return",
+    "net_return",
     "portfolio_return",
     "spy_return",
     "qqq_return",
     "excess_spy_return",
     "excess_qqq_return",
+    "gross_equity",
+    "net_equity",
     "equity",
     "spy_equity",
     "qqq_equity",
@@ -54,12 +62,16 @@ METRIC_COLUMNS = [
     "start_date",
     "end_date",
     "cumulative_return",
+    "gross_cumulative_return",
     "annualized_return",
     "annualized_volatility",
     "sharpe",
     "max_drawdown",
     "win_rate",
     "average_period_return",
+    "average_turnover",
+    "average_transaction_cost",
+    "total_transaction_cost",
     "spy_cumulative_return",
     "qqq_cumulative_return",
     "spy_excess_cumulative_return",
@@ -100,6 +112,12 @@ def main():
         type=int,
         default=DEFAULT_PORTFOLIO["max_industry_count"],
     )
+    parser.add_argument(
+        "--transaction-cost-bps",
+        type=float,
+        default=8.0,
+        help="One-way transaction cost in basis points. 8 bps = 0.08%.",
+    )
     args = parser.parse_args()
 
     snapshots = read_snapshots(Path(args.snapshots))
@@ -118,9 +136,12 @@ def main():
     }
     summary_rows = []
     holding_rows = []
-    equity = 1.0
+    previous_weights = {}
+    gross_equity = 1.0
+    net_equity = 1.0
     spy_equity = 1.0
     qqq_equity = 1.0
+    transaction_cost_rate = args.transaction_cost_bps / 10_000
 
     print(f"Running backtest across {len(dates) - 1} holding periods...")
 
@@ -128,15 +149,23 @@ def main():
         period_end = dates[index]
         candidates = snapshots[period_start]
         portfolio = build_portfolio(candidates, portfolio_config)
-        holdings, portfolio_return, missing_exit_count = evaluate_holdings(
+        current_weights = portfolio_weights(portfolio)
+        buy_turnover, sell_turnover, turnover = calculate_turnover(
+            previous_weights,
+            current_weights,
+        )
+        transaction_cost = turnover * transaction_cost_rate
+        holdings, gross_return, missing_exit_count = evaluate_holdings(
             portfolio,
             prices,
             period_start,
             period_end,
         )
+        net_return = gross_return - transaction_cost
         spy_return = period_return(benchmarks.get("SPY", []), period_start, period_end)
         qqq_return = period_return(benchmarks.get("QQQ", []), period_start, period_end)
-        equity *= 1 + portfolio_return
+        gross_equity *= 1 + gross_return
+        net_equity *= 1 + net_return
         spy_equity *= 1 + spy_return
         qqq_equity *= 1 + qqq_return
 
@@ -148,20 +177,30 @@ def main():
                 "pass_count": sum(1 for item in candidates if item.get("pass_strategy")),
                 "holdings_count": len(portfolio),
                 "missing_exit_count": missing_exit_count,
-                "portfolio_return": portfolio_return,
+                "buy_turnover": buy_turnover,
+                "sell_turnover": sell_turnover,
+                "turnover": turnover,
+                "transaction_cost": transaction_cost,
+                "gross_return": gross_return,
+                "net_return": net_return,
+                "portfolio_return": net_return,
                 "spy_return": spy_return,
                 "qqq_return": qqq_return,
-                "excess_spy_return": portfolio_return - spy_return,
-                "excess_qqq_return": portfolio_return - qqq_return,
-                "equity": equity,
+                "excess_spy_return": net_return - spy_return,
+                "excess_qqq_return": net_return - qqq_return,
+                "gross_equity": gross_equity,
+                "net_equity": net_equity,
+                "equity": net_equity,
                 "spy_equity": spy_equity,
                 "qqq_equity": qqq_equity,
             }
         )
         holding_rows.extend(holdings)
+        previous_weights = current_weights
         print(
             f"[{index}/{len(dates) - 1}] {period_start} -> {period_end}: "
-            f"holdings={len(portfolio)}, return={portfolio_return:.2%}, "
+            f"holdings={len(portfolio)}, gross={gross_return:.2%}, "
+            f"net={net_return:.2%}, turnover={turnover:.2%}, "
             f"SPY={spy_return:.2%}, QQQ={qqq_return:.2%}"
         )
 
@@ -273,6 +312,30 @@ def evaluate_holdings(portfolio, prices, period_start, period_end):
     return holdings, portfolio_return, missing_exit_count
 
 
+def portfolio_weights(portfolio):
+    return {
+        stock["symbol"]: parse_float(stock.get("target_weight"))
+        for stock in portfolio
+    }
+
+
+def calculate_turnover(previous_weights, current_weights):
+    symbols = set(previous_weights) | set(current_weights)
+    buy_turnover = 0.0
+    sell_turnover = 0.0
+
+    for symbol in symbols:
+        previous_weight = previous_weights.get(symbol, 0.0)
+        current_weight = current_weights.get(symbol, 0.0)
+        change = current_weight - previous_weight
+        if change > 0:
+            buy_turnover += change
+        elif change < 0:
+            sell_turnover += abs(change)
+
+    return buy_turnover, sell_turnover, buy_turnover + sell_turnover
+
+
 def period_return(prices, start_date, end_date):
     start_price = price_on_or_before(prices, start_date)
     end_price = price_on_or_before(prices, end_date)
@@ -292,11 +355,14 @@ def price_on_or_before(prices, as_of):
 
 
 def calculate_metrics(summary_rows):
-    returns = [parse_float(row["portfolio_return"]) for row in summary_rows]
+    returns = [parse_float(row["net_return"]) for row in summary_rows]
+    gross_returns = [parse_float(row["gross_return"]) for row in summary_rows]
     spy_returns = [parse_float(row["spy_return"]) for row in summary_rows]
     qqq_returns = [parse_float(row["qqq_return"]) for row in summary_rows]
-    equity_curve = [parse_float(row["equity"]) for row in summary_rows]
+    equity_curve = [parse_float(row["net_equity"]) for row in summary_rows]
+    gross_equity_curve = [parse_float(row["gross_equity"]) for row in summary_rows]
     cumulative_return = equity_curve[-1] - 1 if equity_curve else 0.0
+    gross_cumulative_return = gross_equity_curve[-1] - 1 if gross_equity_curve else 0.0
     periods = len(returns)
     annualized_return = (1 + cumulative_return) ** (4 / periods) - 1 if periods else 0.0
     annualized_volatility = stddev(returns) * math.sqrt(4)
@@ -304,6 +370,13 @@ def calculate_metrics(summary_rows):
     max_drawdown = calculate_max_drawdown(equity_curve)
     win_rate = sum(1 for item in returns if item > 0) / periods if periods else 0.0
     average_period_return = sum(returns) / periods if periods else 0.0
+    average_turnover = average([parse_float(row["turnover"]) for row in summary_rows])
+    average_transaction_cost = average(
+        [parse_float(row["transaction_cost"]) for row in summary_rows]
+    )
+    total_transaction_cost = sum(
+        parse_float(row["transaction_cost"]) for row in summary_rows
+    )
     spy_cumulative_return = compound_return(spy_returns)
     qqq_cumulative_return = compound_return(qqq_returns)
 
@@ -312,12 +385,16 @@ def calculate_metrics(summary_rows):
         "start_date": summary_rows[0]["period_start"] if summary_rows else "",
         "end_date": summary_rows[-1]["period_end"] if summary_rows else "",
         "cumulative_return": cumulative_return,
+        "gross_cumulative_return": gross_cumulative_return,
         "annualized_return": annualized_return,
         "annualized_volatility": annualized_volatility,
         "sharpe": sharpe,
         "max_drawdown": max_drawdown,
         "win_rate": win_rate,
         "average_period_return": average_period_return,
+        "average_turnover": average_turnover,
+        "average_transaction_cost": average_transaction_cost,
+        "total_transaction_cost": total_transaction_cost,
         "spy_cumulative_return": spy_cumulative_return,
         "qqq_cumulative_return": qqq_cumulative_return,
         "spy_excess_cumulative_return": cumulative_return - spy_cumulative_return,
@@ -348,6 +425,10 @@ def stddev(values):
     mean = sum(values) / len(values)
     variance = sum((item - mean) ** 2 for item in values) / (len(values) - 1)
     return math.sqrt(variance)
+
+
+def average(values):
+    return sum(values) / len(values) if values else 0.0
 
 
 def write_rows(path, fieldnames, rows):

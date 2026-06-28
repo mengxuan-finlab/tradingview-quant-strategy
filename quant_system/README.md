@@ -53,8 +53,10 @@ quant_system/output/historical_quarterly_snapshots.csv
 Run the quarterly backtest:
 
 ```powershell
-python -m quant_system.backtest
+python -m quant_system.backtest --transaction-cost-bps 8
 ```
+
+`--transaction-cost-bps 8` means 0.08% one-way trading cost.
 
 Backtest output:
 
@@ -62,4 +64,33 @@ Backtest output:
 quant_system/output/backtest_summary.csv
 quant_system/output/backtest_holdings.csv
 quant_system/output/backtest_metrics.csv
+```
+
+Audit the backtest result:
+
+```powershell
+python -m quant_system.backtest_audit
+```
+
+Audit output:
+
+```text
+quant_system/output/backtest_audit_by_symbol.csv
+quant_system/output/backtest_audit_by_sector.csv
+quant_system/output/backtest_audit_by_industry.csv
+quant_system/output/backtest_audit_by_sleeve.csv
+quant_system/output/backtest_audit_by_period.csv
+quant_system/output/backtest_audit_extremes.csv
+```
+
+Run a parameter sweep:
+
+```powershell
+python -m quant_system.parameter_sweep --top 20
+```
+
+Parameter sweep output:
+
+```text
+quant_system/output/parameter_sweep_results.csv
 ```
