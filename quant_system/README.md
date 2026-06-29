@@ -94,3 +94,27 @@ Parameter sweep output:
 ```text
 quant_system/output/parameter_sweep_results.csv
 ```
+
+Run walk-forward validation:
+
+```powershell
+python -m quant_system.walk_forward
+```
+
+Walk-forward output:
+
+```text
+quant_system/output/walk_forward_results.csv
+```
+
+Summarize parameter stability:
+
+```powershell
+python -m quant_system.parameter_stability
+```
+
+Parameter stability output:
+
+```text
+quant_system/output/parameter_stability_report.csv
+```

@@ -116,7 +116,7 @@ def main():
         "--transaction-cost-bps",
         type=float,
         default=8.0,
-        help="One-way transaction cost in basis points. 8 bps = 0.08%.",
+        help="One-way transaction cost in basis points. 8 bps = 0.08%%.",
     )
     args = parser.parse_args()
 
