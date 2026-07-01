@@ -118,3 +118,15 @@ Parameter stability output:
 ```text
 quant_system/output/parameter_stability_report.csv
 ```
+
+Build the Top15 paper-trading portfolio from the latest valuation results:
+
+```powershell
+python -m quant_system.paper_trading
+```
+
+Paper-trading output:
+
+```text
+quant_system/output/paper_top15.csv
+```
