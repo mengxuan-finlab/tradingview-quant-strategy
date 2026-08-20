@@ -2,6 +2,12 @@
 
 This folder is the non-UI core for a fundamental quant workflow:
 
+If the files feel messy, start here:
+
+```text
+quant_system/FILE_GUIDE.md
+```
+
 1. Pull fundamental data from FMP.
 2. Convert it into a standard snapshot.
 3. Run WACC + DCF.
